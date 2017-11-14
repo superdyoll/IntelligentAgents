@@ -366,6 +366,12 @@
             <partyRepItem classPath="D:\GitHub\IntelligentAgents\out\production\IntelligentAgents\MaximillionGalactica.class">
                 <properties/>
             </partyRepItem>
+            <partyRepItem classPath="D:\GitHub\IntelligentAgents\out\production\IntelligentAgents\Nearest.class">
+                <properties/>
+            </partyRepItem>
+            <partyRepItem classPath="D:\GitHub\IntelligentAgents\out\production\IntelligentAgents\StubbornMule.class">
+                <properties/>
+            </partyRepItem>
         </partyRepItems>
         <domainRepItem/>
         <protocolRepItem/>
