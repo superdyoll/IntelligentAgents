@@ -26,7 +26,7 @@ public class RandomAgent extends AbstractNegotiationParty {
     public void init(NegotiationInfo info) {
         super.init(info);
 
-        randomTime = random.nextDouble();
+        randomTime = 0.75 + 0.2 * random.nextDouble();
     }
 
     /**
