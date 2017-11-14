@@ -72,3 +72,4 @@ fabric.properties
 
 # Genius files
 genius/*.txt
+genius/log
