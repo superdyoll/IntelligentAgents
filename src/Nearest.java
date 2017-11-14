@@ -7,17 +7,17 @@ import negotiator.actions.Offer;
 import negotiator.issue.*;
 import negotiator.parties.AbstractNegotiationParty;
 import negotiator.parties.NegotiationInfo;
+import negotiator.utility.AdditiveUtilitySpace;
+import negotiator.utility.UtilitySpace;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class Nearest extends AbstractNegotiationParty {
 	private String description = "Nearest";
 	private int round = 0;
 	private double stubbornness = 10_000;
 	private Bid maxbid;
+	private Map<Integer, Double> weights = new HashMap<>();
 
 	private List<Pair<AgentID, Offer>> history = new ArrayList<>();
 	private Map<AgentID, Offer> agents = new HashMap<>();
@@ -28,12 +28,15 @@ public class Nearest extends AbstractNegotiationParty {
 	private int lerp(int a, int b, float t) {
 		return (int) (a + t * (b - a));
 	}
+
 	private int lerp(int a, int b, double t) {
 		return (int) (a + t * (b - a));
 	}
+
 	private float lerp(float a, float b, float t) {
 		return a + t * (b - a);
 	}
+
 	private double lerp(double a, double b, double t) {
 		return a + t * (b - a);
 	}
@@ -44,18 +47,23 @@ public class Nearest extends AbstractNegotiationParty {
 	private int clamp(int x, int min, int max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private float clamp(float x, float min, float max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private double clamp(double x, double min, double max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private float clamp01(int x) {
 		return clamp(x, 0, 1);
 	}
+
 	private float clamp01(float x) {
 		return clamp(x, 0, 1);
 	}
+
 	private double clamp01(double x) {
 		return clamp(x, 0, 1);
 	}
@@ -64,7 +72,7 @@ public class Nearest extends AbstractNegotiationParty {
 	 * How much are we willing to conceed at time t?
 	 */
 	private double conceed(double t) {
-		return clamp01(- (Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
+		return clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
 	}
 
 	@Override
@@ -80,7 +88,26 @@ public class Nearest extends AbstractNegotiationParty {
 	public Action chooseAction(List<Class<? extends Action>> list) {
 		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
 
-		if(maxbid == null) maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+		if (maxbid == null) {
+			maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+
+			UtilitySpace space = this.getUtilitySpace();
+			// Default weights of value = 1
+			int numberOfIssues = space.getDomain().getIssues().size();
+
+			// Assign weights if we are additive
+			if(space instanceof AdditiveUtilitySpace) {
+				AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
+
+				// Find the weights using the additive space
+				Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
+				for (Integer id : map.keySet()) weights.put(id, additiveSpace.getWeight(id) * numberOfIssues);
+			} else {
+				// Set weights to 1 as a fallback
+				Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
+				for (Integer id : map.keySet()) weights.put(id, 1.0);
+			}
+		}
 
 		// According to Stacked Alternating Offers Protocol list includes
 		// Accept, Offer and EndNegotiation actions only.
@@ -94,15 +121,15 @@ public class Nearest extends AbstractNegotiationParty {
 
 		// We need some time to understand our opponents
 		// Means we have enough data and we don't (really) need to worry about nulls
-		if(round <= 2) return new Offer(this.getPartyId(), maxbid);
+		if (round <= 2) return new Offer(this.getPartyId(), maxbid);
 
 		// Last bid
-		Bid last = history.get(history.size()-1).getSecond().getBid();
+		Bid last = history.get(history.size() - 1).getSecond().getBid();
 
 		// Find the average
 		Map<Integer, Value> proposal = new HashMap<>(maxbid.getValues());
 
-		for(Map.Entry<Integer, Value> entry : proposal.entrySet()) {
+		for (Map.Entry<Integer, Value> entry : proposal.entrySet()) {
 			int id = entry.getKey();
 			Value value = entry.getValue();
 
@@ -123,13 +150,13 @@ public class Nearest extends AbstractNegotiationParty {
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
-					if(difference < minDiffernce) {
+					if (difference < minDiffernce) {
 						minDiffernce = difference;
 						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}
 
-				proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), willingness)));
+				proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 			} else if (value instanceof ValueReal) {
 				double sum = 0;
 				int count = 0;
@@ -144,13 +171,13 @@ public class Nearest extends AbstractNegotiationParty {
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
-					if(difference < minDiffernce) {
+					if (difference < minDiffernce) {
 						minDiffernce = difference;
 						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}
 
-				proposal.put(id, new ValueReal(lerp(bestValue, ((ValueReal) maxbid.getValue(id)).getValue(), willingness)));
+				proposal.put(id, new ValueReal(lerp(bestValue, ((ValueReal) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 			} else {
 				throw new UnsupportedOperationException("Unexpected value type!");
 			}
@@ -158,7 +185,7 @@ public class Nearest extends AbstractNegotiationParty {
 
 		// Is the offer good enough?
 		Bid bid = new Bid(this.getUtilitySpace().getDomain(), new HashMap<>(proposal));
-		if(this.getUtilitySpace().getUtility(last) >= this.getUtilitySpace().getUtility(bid)) {
+		if (this.getUtilitySpace().getUtility(last) >= this.getUtilitySpace().getUtility(bid)) {
 			System.out.println(getDescription() + ": Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
 			return new Accept(this.getPartyId(), last);
 		} else {
@@ -182,7 +209,7 @@ public class Nearest extends AbstractNegotiationParty {
 
 			// storing last received offer
 			history.add(new Pair<>(sender, offer));
-			if(!agents.containsKey(sender)) agents.put(sender, offer);
+			if (!agents.containsKey(sender)) agents.put(sender, offer);
 		}
 	}
 
