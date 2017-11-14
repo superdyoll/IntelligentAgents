@@ -110,8 +110,16 @@ public class Nearest extends AbstractNegotiationParty {
 				// TODO implement
 				System.err.println("ValueDiscrete is not implemented! Defaulting to max bid.");
 			} else if (value instanceof ValueInteger) {
-				int minDiffernce = Integer.MAX_VALUE;
-				int bestValue = 0;
+				int sum = 0;
+				int count = 0;
+
+				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					sum += ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
+					++count;
+				}
+
+				int bestValue = sum / count; // Start with the average
+				int minDiffernce = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
@@ -123,8 +131,16 @@ public class Nearest extends AbstractNegotiationParty {
 
 				proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), willingness)));
 			} else if (value instanceof ValueReal) {
-				double minDiffernce = Double.MAX_VALUE;
-				double bestValue = 0;
+				double sum = 0;
+				int count = 0;
+
+				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					sum += ((ValueReal) agent.getValue().getBid().getValue(id)).getValue();
+					++count;
+				}
+
+				double bestValue = sum / count; // Start with the average
+				double minDiffernce = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());

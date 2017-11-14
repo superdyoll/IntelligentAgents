@@ -42,7 +42,7 @@ public class StubbornMule extends AbstractNegotiationParty {
 		Bid last = history.get(history.size()-1).getSecond().getBid();
 
 		// Is the offer good enough?
-		if(this.getUtilitySpace().getUtility(maxbid) >= 0.9) { // Small threshold
+		if(this.getUtilitySpace().getUtility(last) >= 0.9) { // Small threshold
 			System.out.println(getDescription() + ": Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
 			return new Accept(this.getPartyId(), last);
 		} else {
