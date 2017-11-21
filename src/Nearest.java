@@ -89,7 +89,8 @@ public class Nearest extends AbstractNegotiationParty {
 		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
 
 		if (maxbid == null) {
-			maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+			maxbid = this.getMaxUtilityBid();
+			agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxbid));
 
 			UtilitySpace space = this.getUtilitySpace();
 			// Default weights of value = 1
@@ -129,13 +130,21 @@ public class Nearest extends AbstractNegotiationParty {
 		// Find the average
 		Map<Integer, Value> proposal = new HashMap<>(maxbid.getValues());
 
+		int discreteConcessions = (int) Math.floor(proposal.size() * (1 - willingness));
+
 		for (Map.Entry<Integer, Value> entry : proposal.entrySet()) {
 			int id = entry.getKey();
 			Value value = entry.getValue();
 
 			if (value instanceof ValueDiscrete) {
-				// TODO implement
-				System.err.println("ValueDiscrete is not implemented! Defaulting to max bid.");
+//				System.err.println("ValueDiscrete is not implemented! Defaulting to max bid.");
+
+				// Some randomness to spice things up, weighted of course
+				// TODO actually test this code!
+				if(discreteConcessions > 0 && Math.random() > 0.5 * weights.get(id)) {
+					proposal.put(id, last.getValue(id));
+					discreteConcessions -= 1;
+				}
 			} else if (value instanceof ValueInteger) {
 				int sum = 0;
 				int count = 0;
@@ -149,6 +158,8 @@ public class Nearest extends AbstractNegotiationParty {
 				int minDifference = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					if(agent.getKey() == this.getPartyId()) continue;
+
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
@@ -170,6 +181,8 @@ public class Nearest extends AbstractNegotiationParty {
 				double minDifference = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					if(agent.getKey() == this.getPartyId()) continue;
+
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
