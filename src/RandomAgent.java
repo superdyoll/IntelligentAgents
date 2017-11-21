@@ -15,7 +15,7 @@ import java.util.Random;
  * if the utility of the bid is higher than Example Agent's last bid.
  */
 public class RandomAgent extends AbstractNegotiationParty {
-    private final String description = "Example Agent";
+    private final String description = "Random Agent";
 
     private Bid lastReceivedOffer; // offer on the table
     private Bid myLastOffer;
