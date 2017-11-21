@@ -158,6 +158,8 @@ public class Nearest extends AbstractNegotiationParty {
 				int minDifference = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					if(agent.getKey() == this.getPartyId()) continue;
+
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
@@ -179,6 +181,8 @@ public class Nearest extends AbstractNegotiationParty {
 				double minDifference = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
+					if(agent.getKey() == this.getPartyId()) continue;
+
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
