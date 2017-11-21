@@ -32,7 +32,7 @@ public class StubbornMule extends AbstractNegotiationParty {
 	public Action chooseAction(List<Class<? extends Action>> list) {
 		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
 
-		if(maxbid == null) maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+		if(maxbid == null) maxbid = this.getMaxUtilityBid();
 
 		// We need some time to understand our opponents
 		// Means we have enough data and we don't (really) need to worry about nulls

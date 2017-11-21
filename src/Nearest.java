@@ -89,7 +89,8 @@ public class Nearest extends AbstractNegotiationParty {
 		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
 
 		if (maxbid == null) {
-			maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+			maxbid = this.getMaxUtilityBid();
+			agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxbid));
 
 			UtilitySpace space = this.getUtilitySpace();
 			// Default weights of value = 1
@@ -154,12 +155,12 @@ public class Nearest extends AbstractNegotiationParty {
 				}
 
 				int bestValue = sum / count; // Start with the average
-				int minDiffernce = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
+				int minDifference = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
-					if (difference < minDiffernce) {
-						minDiffernce = difference;
+					if (difference < minDifference) {
+						minDifference = difference;
 						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}
@@ -175,12 +176,12 @@ public class Nearest extends AbstractNegotiationParty {
 				}
 
 				double bestValue = sum / count; // Start with the average
-				double minDiffernce = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
+				double minDifference = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
-					if (difference < minDiffernce) {
-						minDiffernce = difference;
+					if (difference < minDifference) {
+						minDifference = difference;
 						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}

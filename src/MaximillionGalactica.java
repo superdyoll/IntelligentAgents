@@ -80,7 +80,10 @@ public class MaximillionGalactica extends AbstractNegotiationParty {
 	public Action chooseAction(List<Class<? extends Action>> list) {
 		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
 
-		if(maxbid == null) maxbid = this.getMaxUtilityBid(); // TODO REALLY FUCKING SLOW
+		if(maxbid == null) {
+			maxbid = this.getMaxUtilityBid();
+			agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxbid));
+		}
 
 		// According to Stacked Alternating Offers Protocol list includes
 		// Accept, Offer and EndNegotiation actions only.
