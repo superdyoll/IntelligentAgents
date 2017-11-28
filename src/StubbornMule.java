@@ -7,16 +7,13 @@ import negotiator.actions.Offer;
 import negotiator.parties.AbstractNegotiationParty;
 import negotiator.parties.NegotiationInfo;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class StubbornMule extends AbstractNegotiationParty {
 	private String description = "Stubborn Mule";
 	private Bid maxbid;
 
-	private List<Pair<AgentID, Offer>> history = new ArrayList<>();
+	private Deque<Pair<AgentID, Offer>> history = new LimitedQueue<>(250);
 	private Map<AgentID, Offer> agents = new HashMap<>();
 
 	@Override
@@ -39,7 +36,7 @@ public class StubbornMule extends AbstractNegotiationParty {
 		if(history.size() == 0) return new Offer(this.getPartyId(), maxbid);
 
 		// Last bid
-		Bid last = history.get(history.size()-1).getSecond().getBid();
+		Bid last = history.peekLast().getSecond().getBid();
 
 		// Is the offer good enough?
 		if(this.getUtilitySpace().getUtility(last) >= 0.9) { // Small threshold
