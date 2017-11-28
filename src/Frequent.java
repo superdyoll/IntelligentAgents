@@ -12,8 +12,8 @@ import negotiator.utility.UtilitySpace;
 
 import java.util.*;
 
-public class Nearest extends AbstractNegotiationParty {
-	private String description = "Nearest";
+public class Frequent extends AbstractNegotiationParty {
+	private String description = "Frequent";
 	private int round = 0;
 	private double stubbornness = 5_000;
 	private Bid maxbid;
@@ -21,6 +21,7 @@ public class Nearest extends AbstractNegotiationParty {
 
 	private Deque<Pair<AgentID, Offer>> history = new LimitedQueue<>(250);
 	private Map<AgentID, Offer> agents = new HashMap<>();
+	private Map<Integer, Map<String, Integer>> frequencies = new HashMap<>();
 
 	/**
 	 * Lerp between two values a and b using t
@@ -139,12 +140,14 @@ public class Nearest extends AbstractNegotiationParty {
 			if (value instanceof ValueDiscrete) {
 //				System.err.println("ValueDiscrete is not implemented! Defaulting to max bid.");
 
-				// Some randomness to spice things up, weighted of course
-				// TODO actually test this code!
-				if(discreteConcessions > 0 && Math.random() > 0.5 * weights.get(id)) {
-					proposal.put(id, last.getValue(id));
-					discreteConcessions -= 1;
-				}
+//				// Some randomness to spice things up, weighted of course
+//				// TODO actually test this code!
+//				if(discreteConcessions > 0 && Math.random() > 0.5 * weights.get(id)) {
+//					proposal.put(id, last.getValue(id));
+//					discreteConcessions -= 1;
+//				}
+
+
 			} else if (value instanceof ValueInteger) {
 				int sum = 0;
 				int count = 0;
