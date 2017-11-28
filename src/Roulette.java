@@ -1,19 +1,21 @@
-import misc.Pair;
 import negotiator.AgentID;
 import negotiator.Bid;
 import negotiator.actions.Accept;
 import negotiator.actions.Action;
+import negotiator.actions.EndNegotiation;
 import negotiator.actions.Offer;
 import negotiator.issue.*;
 import negotiator.parties.AbstractNegotiationParty;
 import negotiator.parties.NegotiationInfo;
 import negotiator.utility.AdditiveUtilitySpace;
+import negotiator.utility.EvaluatorDiscrete;
 import negotiator.utility.UtilitySpace;
 
+import java.sql.Timestamp;
 import java.util.*;
 
-public class Frequent extends AbstractNegotiationParty {
-	private String description = "Frequent";
+public class Roulette extends AbstractNegotiationParty {
+	private String description = "A Game of Chance";
 	private int round = 0;
 	private double stubbornness = 5_000;
 	private Bid maxbid;
@@ -29,15 +31,12 @@ public class Frequent extends AbstractNegotiationParty {
 	private int lerp(int a, int b, float t) {
 		return (int) (a + t * (b - a));
 	}
-
 	private int lerp(int a, int b, double t) {
 		return (int) (a + t * (b - a));
 	}
-
 	private float lerp(float a, float b, float t) {
 		return a + t * (b - a);
 	}
-
 	private double lerp(double a, double b, double t) {
 		return a + t * (b - a);
 	}
@@ -48,26 +47,32 @@ public class Frequent extends AbstractNegotiationParty {
 	private int clamp(int x, int min, int max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-
 	private float clamp(float x, float min, float max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-
 	private double clamp(double x, double min, double max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-
 	private float clamp01(int x) {
 		return clamp(x, 0, 1);
 	}
-
 	private float clamp01(float x) {
 		return clamp(x, 0, 1);
 	}
-
 	private double clamp01(double x) {
 		return clamp(x, 0, 1);
 	}
+
+	private void log(Object... objects) {
+		System.out.println(new Timestamp(System.currentTimeMillis()) + " " + getDescription() + ": " + objects);
+	}
+	private void warn(Object... objects) {
+		System.err.println(new Timestamp(System.currentTimeMillis()) + " " + getDescription() + ": " + objects);
+	}
+
+	private boolean within(int value, int min, int max) {return value >= min && value <= max;}
+	private boolean within(float value, float min, float max) {return value >= min && value <= max;}
+	private boolean within(double value, double min, double max) {return value >= min && value <= max;}
 
 	/**
 	 * How much are we willing to conceed at time t?
@@ -87,7 +92,7 @@ public class Frequent extends AbstractNegotiationParty {
 	 */
 	@Override
 	public Action chooseAction(List<Class<? extends Action>> list) {
-		System.out.println(getDescription() + ": ChooseAction(" + list + ")");
+		log("ChooseAction(" + list + ")");
 
 		if (maxbid == null) {
 			maxbid = this.getMaxUtilityBid();
@@ -95,7 +100,7 @@ public class Frequent extends AbstractNegotiationParty {
 
 			UtilitySpace space = this.getUtilitySpace();
 			// Default weights of value = 1
-			int numberOfIssues = space.getDomain().getIssues().size();
+			int numberOfIssues = maxbid.getIssues().size();
 
 			// Assign weights if we are additive
 			if(space instanceof AdditiveUtilitySpace) {
@@ -109,6 +114,8 @@ public class Frequent extends AbstractNegotiationParty {
 				Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
 				for (Integer id : map.keySet()) weights.put(id, 1.0);
 			}
+
+			this.receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), new Bid(this.getUtilitySpace().getDomain(), maxbid.getValues())));
 		}
 
 		// According to Stacked Alternating Offers Protocol list includes
@@ -128,26 +135,39 @@ public class Frequent extends AbstractNegotiationParty {
 		// Last bid
 		Bid last = history.peekLast().getSecond().getBid();
 
-		// Find the average
+		// Make a proposal
 		Map<Integer, Value> proposal = new HashMap<>(maxbid.getValues());
+		// Roulette
+		Pair<Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Pair<>(0.0, new ArrayList<>());
 
-		int discreteConcessions = (int) Math.floor(proposal.size() * (1 - willingness));
-
-		for (Map.Entry<Integer, Value> entry : proposal.entrySet()) {
-			int id = entry.getKey();
-			Value value = entry.getValue();
-
+		proposal.forEach((Integer id, Value value) -> {
 			if (value instanceof ValueDiscrete) {
-//				System.err.println("ValueDiscrete is not implemented! Defaulting to max bid.");
+				// Only makes sense if we have an additive space
+				if(this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+					List<Pair<Double, String>> sublist = new ArrayList<>();
+					double max = 0, total = 0;
 
-//				// Some randomness to spice things up, weighted of course
-//				// TODO actually test this code!
-//				if(discreteConcessions > 0 && Math.random() > 0.5 * weights.get(id)) {
-//					proposal.put(id, last.getValue(id));
-//					discreteConcessions -= 1;
-//				}
+					// iterate over values, adding to pair
+					AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) this.getUtilitySpace();
 
+					for (ValueDiscrete valueDiscrete : ((IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1)).getValues()) {
+						// score each choice
+						double evaluation = 0.5;
+						try {
+							evaluation = ((EvaluatorDiscrete) additiveSpace.getEvaluator(id)).getEvaluation(valueDiscrete);
+						} catch (Exception e) {
+							warn("Failed to getEvaluation(" + valueDiscrete + ")");
+						}
+						double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxbid.getIssues().size());
+						double score = evaluation * frequency * weights.get(id);
+						max = Math.max(max, score);
+						total += score;
+						sublist.add(new Pair<>(score, valueDiscrete.getValue()));
+					}
 
+					roulette.setFirst(roulette.getFirst() + total);
+					roulette.getSecond().add(new Triplet<>(max, total, sublist));
+				}
 			} else if (value instanceof ValueInteger) {
 				int sum = 0;
 				int count = 0;
@@ -173,7 +193,7 @@ public class Frequent extends AbstractNegotiationParty {
 				proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 			} else if (value instanceof ValueReal) {
 				double sum = 0;
-				int count = 0;
+				long count = 0;
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 					sum += ((ValueReal) agent.getValue().getBid().getValue(id)).getValue();
@@ -197,17 +217,52 @@ public class Frequent extends AbstractNegotiationParty {
 			} else {
 				throw new UnsupportedOperationException("Unexpected value type!");
 			}
+		});
+
+		// Spin the wheel, if additive
+		if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+			// Loop until within range, loop with an upper limit.
+			for(int c = 0; c < 10 * maxbid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal)), willingness - 0.1, willingness + 0.1); c++) {
+				double outervalue = Math.random() * roulette.getFirst();
+
+				for (int i = 0; i < roulette.getSecond().size(); i++) {
+					Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getSecond().get(i);
+					outervalue -= issue.getFirst();
+
+					if (outervalue <= 0) {
+						// We have found our issue
+						double innervalue = Math.random() * issue.getSecond();
+
+						for (int j = 0; j < issue.getThird().size(); j++) {
+							Pair<Double, String> choice = issue.getThird().get(j);
+							innervalue -= choice.getFirst();
+
+							// We have found our choice
+							if (innervalue <= 0) {
+								proposal.put(i, new ValueDiscrete(choice.getSecond()));
+								break;
+							}
+						}
+
+						break;
+					}
+				}
+			}
 		}
 
 		// Is the offer good enough?
-		Bid bid = new Bid(this.getUtilitySpace().getDomain(), new HashMap<>(proposal));
+		Bid bid = new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal);
 		if (this.getUtilitySpace().getUtility(last) >= this.getUtilitySpace().getUtility(bid)) {
-			System.out.println(getDescription() + ": Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
-			return new Accept(this.getPartyId(), last);
+			log("Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
+			Accept accept = new Accept(this.getPartyId(), last);
+			receiveMessage(this.getPartyId(), accept);
+			return accept;
 		} else {
 			// Offer is no good, propose our own
-			System.out.println(getDescription() + ": Proposing offer " + this.getUtilitySpace().getUtility(bid) + " " + bid);
-			return new Offer(this.getPartyId(), bid);
+			log("Proposing offer " + this.getUtilitySpace().getUtility(bid) + " " + bid);
+			Offer offer = new Offer(this.getPartyId(), bid);
+			receiveMessage(this.getPartyId(), offer);
+			return offer;
 		}
 	}
 
@@ -218,7 +273,7 @@ public class Frequent extends AbstractNegotiationParty {
 	public void receiveMessage(AgentID sender, Action act) {
 		super.receiveMessage(sender, act);
 
-		System.out.println(getDescription() + ": receiveMessage(" + sender + "," + act + ")");
+		log("receiveMessage(" + sender + "," + act + ")");
 
 		if (act instanceof Offer) { // sender is making an offer
 			Offer offer = (Offer) act;
@@ -226,6 +281,28 @@ public class Frequent extends AbstractNegotiationParty {
 			// storing last received offer
 			history.add(new Pair<>(sender, offer));
 			if (!agents.containsKey(sender)) agents.put(sender, offer);
+
+			offer.getBid().getValues().forEach((Integer id, Value value) -> {
+				// We only really care about discrete values
+				if(value instanceof ValueDiscrete) {
+					if(!frequencies.containsKey(id)) {
+						frequencies.put(id, new HashMap<>());
+						frequencies.get(id).put("__total__", 0);
+					}
+
+					String string = ((ValueDiscrete) value).getValue();
+					if(!frequencies.get(id).containsKey(string)) {
+						frequencies.get(id).put(string, 1);
+					} else {
+						frequencies.get(id).put(string, frequencies.get(id).get(string) + 1);
+					}
+					frequencies.get(id).put("__total__", frequencies.get(id).get("__total__") + 1);
+				}
+			});
+		} else if (act instanceof Accept) {
+			log("Awesome!");
+		} else if (act instanceof EndNegotiation) {
+			warn("BOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!");
 		}
 	}
 
@@ -242,7 +319,8 @@ public class Frequent extends AbstractNegotiationParty {
 			return this.getUtilitySpace().getMaxUtilityBid();
 		} catch (Exception e) {
 			e.printStackTrace();
+			warn("Failed to get maxUtilityBid()!");
+			return this.generateRandomBid();
 		}
-		return null;
 	}
 }
