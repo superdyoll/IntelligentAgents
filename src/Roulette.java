@@ -17,7 +17,9 @@ import java.util.*;
 public class Roulette extends AbstractNegotiationParty {
 	private String description = "A Game of Chance";
 	private int round = 0;
-	private double stubbornness = 5_000;
+	private double stubbornness = 2_000;
+	private boolean randomness = true;
+	private int randomSpike = (int) Math.round(Math.random() * 50);
 	private Bid maxbid;
 	private Map<Integer, Double> weights = new HashMap<>();
 
@@ -78,7 +80,18 @@ public class Roulette extends AbstractNegotiationParty {
 	 * How much are we willing to conceed at time t?
 	 */
 	private double conceed(double t) {
-		return clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
+		--randomSpike;
+		double randomAmount = 0;
+		if(randomSpike <= 0) {
+			randomAmount = Math.random() * 0.25;
+			randomSpike = (int) Math.round(Math.random() * 50);
+		}
+
+		double value = randomness ?
+				clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95 + Math.random() * 0.1 + randomAmount):
+				clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
+
+		return value;
 	}
 
 	@Override
