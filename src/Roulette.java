@@ -16,13 +16,35 @@ import java.util.*;
 
 public class Roulette extends AbstractNegotiationParty {
 	private String description = "A Game of Chance";
+
+	/**
+	 * Round tracker
+	 */
 	private int round = 0;
+	/**
+	 * Controls how quickly the agent concedes
+	 */
 	private double stubbornness = 5_000;
+	/**
+	 * Max bid possible for the agent
+	 */
 	private Bid maxbid;
+	/**
+	 * Weighting of different issuse
+	 */
 	private Map<Integer, Double> weights = new HashMap<>();
 
+	/**
+	 * History of bids made
+	 */
 	private Deque<Pair<AgentID, Offer>> history = new LimitedQueue<>(250);
+	/**
+	 * The other agents in the negotiation
+	 */
 	private Map<AgentID, Offer> agents = new HashMap<>();
+	/**
+	 * Frequency of previous values bids
+	 */
 	private Map<Integer, Map<String, Integer>> frequencies = new HashMap<>();
 
 	/**
@@ -31,12 +53,15 @@ public class Roulette extends AbstractNegotiationParty {
 	private int lerp(int a, int b, float t) {
 		return (int) (a + t * (b - a));
 	}
+
 	private int lerp(int a, int b, double t) {
 		return (int) (a + t * (b - a));
 	}
+
 	private float lerp(float a, float b, float t) {
 		return a + t * (b - a);
 	}
+
 	private double lerp(double a, double b, double t) {
 		return a + t * (b - a);
 	}
@@ -47,18 +72,23 @@ public class Roulette extends AbstractNegotiationParty {
 	private int clamp(int x, int min, int max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private float clamp(float x, float min, float max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private double clamp(double x, double min, double max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
+
 	private float clamp01(int x) {
 		return clamp(x, 0, 1);
 	}
+
 	private float clamp01(float x) {
 		return clamp(x, 0, 1);
 	}
+
 	private double clamp01(double x) {
 		return clamp(x, 0, 1);
 	}
@@ -66,13 +96,22 @@ public class Roulette extends AbstractNegotiationParty {
 	private void log(Object... objects) {
 		System.out.println(new Timestamp(System.currentTimeMillis()) + " " + getDescription() + ": " + objects);
 	}
+
 	private void warn(Object... objects) {
 		System.err.println(new Timestamp(System.currentTimeMillis()) + " " + getDescription() + ": " + objects);
 	}
 
-	private boolean within(int value, int min, int max) {return value >= min && value <= max;}
-	private boolean within(float value, float min, float max) {return value >= min && value <= max;}
-	private boolean within(double value, double min, double max) {return value >= min && value <= max;}
+	private boolean within(int value, int min, int max) {
+		return value >= min && value <= max;
+	}
+
+	private boolean within(float value, float min, float max) {
+		return value >= min && value <= max;
+	}
+
+	private boolean within(double value, double min, double max) {
+		return value >= min && value <= max;
+	}
 
 	/**
 	 * How much are we willing to conceed at time t?
@@ -94,25 +133,33 @@ public class Roulette extends AbstractNegotiationParty {
 	public Action chooseAction(List<Class<? extends Action>> list) {
 		log("ChooseAction(" + list + ")");
 
+		// Check if the max  bid has been set
 		if (maxbid == null) {
+			// Set the max bid
 			maxbid = this.getMaxUtilityBid();
+
+			// Add ourselves to the agents with our preference
 			agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxbid));
 
+			// Get the utility space
 			UtilitySpace space = this.getUtilitySpace();
+
 			// Default weights of value = 1
 			int numberOfIssues = maxbid.getIssues().size();
 
 			// Assign weights if we are additive
-			if(space instanceof AdditiveUtilitySpace) {
+			if (space instanceof AdditiveUtilitySpace) {
 				AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
 
 				// Find the weights using the additive space
 				Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
-				for (Integer id : map.keySet()) weights.put(id, additiveSpace.getWeight(id) * numberOfIssues);
+
+				// Get the weighting of the issues
+				map.keySet().forEach((Integer id) -> weights.put(id, additiveSpace.getWeight(id) * numberOfIssues));
 			} else {
 				// Set weights to 1 as a fallback
 				Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
-				for (Integer id : map.keySet()) weights.put(id, 1.0);
+                map.keySet().forEach((Integer id) -> weights.put(id, 1.0));
 			}
 
 			this.receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), new Bid(this.getUtilitySpace().getDomain(), maxbid.getValues())));
@@ -137,28 +184,40 @@ public class Roulette extends AbstractNegotiationParty {
 
 		// Make a proposal
 		Map<Integer, Value> proposal = new HashMap<>(maxbid.getValues());
-		// Roulette
+
+		// TODO: Make into a class
+		// Roulette Wheel
 		Pair<Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Pair<>(0.0, new ArrayList<>());
 
+		// Iterate over the different values
 		proposal.forEach((Integer id, Value value) -> {
 			if (value instanceof ValueDiscrete) {
 				// Only makes sense if we have an additive space
-				if(this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+				if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+
+				    // Store a list of pairs fr
 					List<Pair<Double, String>> sublist = new ArrayList<>();
 					double max = 0, total = 0;
 
 					// iterate over values, adding to pair
 					AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) this.getUtilitySpace();
 
-					for (ValueDiscrete valueDiscrete : ((IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1)).getValues()) {
-						// score each choice
+					// Get the current Issue
+					IssueDiscrete issueDiscrete = (IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1);
+
+					for (ValueDiscrete valueDiscrete : issueDiscrete.getValues()) {
+						// score each choice, default is 0.5
 						double evaluation = 0.5;
 						try {
+						    // Get the evaluation for that value
 							evaluation = ((EvaluatorDiscrete) additiveSpace.getEvaluator(id)).getEvaluation(valueDiscrete);
 						} catch (Exception e) {
 							warn("Failed to getEvaluation(" + valueDiscrete + ")");
 						}
+						// Get the frequency for the value if it's not yet been seen default to 1/number of issues
 						double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxbid.getIssues().size());
+
+						// Create a fitness for the value
 						double score = evaluation * frequency * weights.get(id);
 						max = Math.max(max, score);
 						total += score;
@@ -169,7 +228,9 @@ public class Roulette extends AbstractNegotiationParty {
 					roulette.getSecond().add(new Triplet<>(max, total, sublist));
 				}
 			} else if (value instanceof ValueInteger) {
-				int sum = 0;
+                System.out.println("WE WERE TOLD THERE WOULDN'T BE ANY INTEGERS!!!!");
+
+                int sum = 0;
 				int count = 0;
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
@@ -181,7 +242,7 @@ public class Roulette extends AbstractNegotiationParty {
 				int minDifference = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
-					if(agent.getKey() == this.getPartyId()) continue;
+					if (agent.getKey() == this.getPartyId()) continue;
 
 					int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
@@ -192,6 +253,8 @@ public class Roulette extends AbstractNegotiationParty {
 
 				proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 			} else if (value instanceof ValueReal) {
+                System.out.println("WE WERE TOLD THERE WOULDN'T BE ANY REALS!!!!");
+
 				double sum = 0;
 				long count = 0;
 
@@ -204,12 +267,12 @@ public class Roulette extends AbstractNegotiationParty {
 				double minDifference = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
 
 				for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
-					if(agent.getKey() == this.getPartyId()) continue;
+					if (agent.getKey() == this.getPartyId()) continue;
 
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
-						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
+						bestValue = ((ValueReal) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}
 
@@ -219,10 +282,12 @@ public class Roulette extends AbstractNegotiationParty {
 			}
 		});
 
+
+		// TODO: Improve readability
 		// Spin the wheel, if additive
 		if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
 			// Loop until within range, loop with an upper limit.
-			for(int c = 0; c < 10 * maxbid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal)), willingness - 0.1, willingness + 0.1); c++) {
+			for (int c = 0; c < 10 * maxbid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal)), willingness - 0.1, willingness + 0.1); c++) {
 				double outervalue = Math.random() * roulette.getFirst();
 
 				for (int i = 0; i < roulette.getSecond().size(); i++) {
@@ -235,7 +300,7 @@ public class Roulette extends AbstractNegotiationParty {
 
 						for (int j = 0; j < issue.getThird().size(); j++) {
 							Pair<Double, String> choice = issue.getThird().get(j);
-							innervalue -= choice.getFirst();
+							innervalue -= issue.getSecond() - choice.getFirst();
 
 							// We have found our choice
 							if (innervalue <= 0) {
@@ -284,14 +349,14 @@ public class Roulette extends AbstractNegotiationParty {
 
 			offer.getBid().getValues().forEach((Integer id, Value value) -> {
 				// We only really care about discrete values
-				if(value instanceof ValueDiscrete) {
-					if(!frequencies.containsKey(id)) {
+				if (value instanceof ValueDiscrete) {
+					if (!frequencies.containsKey(id)) {
 						frequencies.put(id, new HashMap<>());
 						frequencies.get(id).put("__total__", 0);
 					}
 
 					String string = ((ValueDiscrete) value).getValue();
-					if(!frequencies.get(id).containsKey(string)) {
+					if (!frequencies.get(id).containsKey(string)) {
 						frequencies.get(id).put(string, 1);
 					} else {
 						frequencies.get(id).put(string, frequencies.get(id).get(string) + 1);
