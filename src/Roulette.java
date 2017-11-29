@@ -10,6 +10,8 @@ import java.util.*;
 
 @SuppressWarnings({"SameParameterValue", "WeakerAccess", "unused"})
 public class Roulette extends AbstractNegotiationParty {
+	protected static int created = 0;
+
 	/**
 	 * Round tracker
 	 */
@@ -18,7 +20,7 @@ public class Roulette extends AbstractNegotiationParty {
 	 * Controls how quickly the agent concedes
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double stubbornness = 2_500;
+	protected double stubbornness = 5_000;
 	/**
 	 * Make the agent random
 	 */
@@ -132,14 +134,18 @@ public class Roulette extends AbstractNegotiationParty {
 		}
 
 		return randomness ?
-			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95 + Math.random() * 0.1 + randomAmount):
-			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
+			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.90 + Math.random() * 0.1 + randomAmount):
+			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95);
+	}
+
+	public Roulette() {
+		// Count number of instances
+		++created;
 	}
 
 	@Override
 	public void init(NegotiationInfo info) {
 		super.init(info);
-
 		log("Initialised");
 	}
 
@@ -304,9 +310,36 @@ public class Roulette extends AbstractNegotiationParty {
 			// Spin the wheel, if additive
 			if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
 				// Loop until within range, loop with an upper limit.
-				// Always spin the wheel once, for added randomness
 				int c = 0;
-				for (; c == 0 || (c < 20 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1)); c++) {
+				for (; c < 10 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1); c++) {
+					double outerValue = Math.random() * roulette.getFirst();
+
+					for (int i = 0; i < roulette.getSecond().size(); i++) {
+						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getSecond().get(i);
+						outerValue -= issue.getFirst();
+
+						if (outerValue <= 0) {
+							// We have found our issue
+							double innerValue = Math.random() * issue.getSecond();
+
+							for (int j = 0; j < issue.getThird().size(); j++) {
+								Pair<Double, String> choice = issue.getThird().get(j);
+								innerValue -= choice.getFirst();
+
+								// We have found our choice
+								if (innerValue <= 0) {
+									proposal.put(i, new ValueDiscrete(choice.getSecond()));
+									break;
+								}
+							}
+
+							break;
+						}
+					}
+				}
+
+				// If we fail to find a good solution, just try to find one with a minimum value
+				for (; c < 20 * maxBid.getIssues().size() && this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)) <= willingness - 0.1; c++) {
 					double outerValue = Math.random() * roulette.getFirst();
 
 					for (int i = 0; i < roulette.getSecond().size(); i++) {
@@ -337,7 +370,7 @@ public class Roulette extends AbstractNegotiationParty {
 
 			// Is the offer good enough?
 			Bid bid = new Bid(this.getUtilitySpace().getDomain(), proposal);
-			if (this.getUtilitySpace().getUtility(last) >= this.getUtilitySpace().getUtility(bid)) {
+			if (this.getUtilitySpace().getUtility(last) >= willingness) {
 				log("Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
 				Accept accept = new Accept(this.getPartyId(), last);
 				receiveMessage(this.getPartyId(), accept);
@@ -406,7 +439,9 @@ public class Roulette extends AbstractNegotiationParty {
 	 */
 	@Override
 	public String getDescription() {
-		return "A Game of Chance";
+		String[] names = {"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima", "Mike", "November", "Oscar", "Papa", "Quebec", "Romeo", "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-ray", "Yankee", "Zulu"};
+		String[] descriptors = new String[]{"Submissive", "Soft", "Kind", "Reasonable", "Determined", "Firm", "Tough", "Angry", "Mad"};
+		return descriptors[(int) Math.round(clamp(Math.log10(stubbornness) + 1, 0, descriptors.length))] + " " + names[created % names.length] + " " + getClass().getSimpleName();
 	}
 
 	private Bid getMaxUtilityBid() {
