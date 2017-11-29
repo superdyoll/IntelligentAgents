@@ -186,7 +186,7 @@ public class Nearest extends AbstractNegotiationParty {
 					double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
 					if (difference < minDifference) {
 						minDifference = difference;
-						bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
+						bestValue = ((ValueReal) agent.getValue().getBid().getValue(id)).getValue();
 					}
 				}
 

@@ -20,13 +20,18 @@ public class Roulette extends AbstractNegotiationParty {
 	 * Controls how quickly the agent concedes
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double stubbornness = 5_000;
+	protected double stubbornness = 10_000;
 	/**
 	 * Make the agent random
 	 */
 	@SuppressWarnings("CanBeFinal")
 	protected boolean randomness = true;
 	protected int randomSpike = randomness ? (int) Math.round(Math.random() * 50) : 0;
+	/**
+	 * How we want to bias our wheel. 1 = our most important issue never gets changed, > 1 = our most important issue gets changed using the bias
+	 */
+	@SuppressWarnings("CanBeFinal")
+	protected double issueBias = 1.5; // Don't go below 1!
 	/**
 	 * Max bid possible for the agent
 	 */
@@ -35,7 +40,6 @@ public class Roulette extends AbstractNegotiationParty {
 	 * Weighting of different issues
 	 */
 	protected final Map<Integer, Double> weights = new HashMap<>();
-
 	/**
 	 * History of bids made
 	 */
@@ -140,7 +144,7 @@ public class Roulette extends AbstractNegotiationParty {
 
 	public Roulette() {
 		// Count number of instances
-		++created;
+		++Roulette.created;
 	}
 
 	@Override
@@ -208,13 +212,14 @@ public class Roulette extends AbstractNegotiationParty {
 
 			// Last bid
 			Bid last = history.peekLast().getSecond().getBid();
+			if(last == null) last = this.generateRandomBid();
 
 			// Make a proposal, needs to be HashMap to avoid a cast
 			HashMap<Integer, Value> proposal = new HashMap<>(maxBid.getValues());
 
 			// TODO: Make into a class
 			// Roulette
-			Pair<Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Pair<>(0.0, new ArrayList<>());
+			Triplet<Double, Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Triplet<>(0.0, 0.0, new ArrayList<>());
 
 			proposal.forEach((Integer id, Value value) -> {
 				if (value instanceof ValueDiscrete) {
@@ -250,8 +255,9 @@ public class Roulette extends AbstractNegotiationParty {
 							sublist.add(new Pair<>(score, valueDiscrete.getValue()));
 						}
 
-						roulette.setFirst(roulette.getFirst() + total);
-						roulette.getSecond().add(new Triplet<>(max, total, sublist));
+						roulette.setFirst(Math.max(roulette.getFirst(), total));
+						roulette.setSecond(roulette.getSecond() + total);
+						roulette.getThird().add(new Triplet<>(max, total, sublist));
 					}
 				} else if (value instanceof ValueInteger) {
 					int sum = 0;
@@ -310,47 +316,26 @@ public class Roulette extends AbstractNegotiationParty {
 			// Spin the wheel, if additive
 			if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
 				// Loop until within range, loop with an upper limit.
-				int c = 0;
-				for (; c < 10 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1); c++) {
-					double outerValue = Math.random() * roulette.getFirst();
-
-					for (int i = 0; i < roulette.getSecond().size(); i++) {
-						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getSecond().get(i);
-						outerValue -= issue.getFirst();
-
-						if (outerValue <= 0) {
-							// We have found our issue
-							double innerValue = Math.random() * issue.getSecond();
-
-							for (int j = 0; j < issue.getThird().size(); j++) {
-								Pair<Double, String> choice = issue.getThird().get(j);
-								innerValue -= choice.getFirst();
-
-								// We have found our choice
-								if (innerValue <= 0) {
-									proposal.put(i, new ValueDiscrete(choice.getSecond()));
-									break;
-								}
-							}
-
-							break;
-						}
-					}
-				}
-
 				// If we fail to find a good solution, just try to find one with a minimum value
-				for (; c < 20 * maxBid.getIssues().size() && this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)) <= willingness - 0.1; c++) {
-					double outerValue = Math.random() * roulette.getFirst();
+				int c = 0;
 
-					for (int i = 0; i < roulette.getSecond().size(); i++) {
-						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getSecond().get(i);
-						outerValue -= issue.getFirst();
+				for (;
+					(c < 10 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1)) ||
+					(c < 20 * maxBid.getIssues().size() && this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)) <= willingness - 0.1);
+				c++) {
+					double outerValue = Math.random() * roulette.getSecond();
+
+					for (int i = 0; i < roulette.getThird().size(); i++) {
+						// Max, total, sublist
+						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getThird().get(i);
+						outerValue -= roulette.getFirst() * issueBias - issue.getFirst();
 
 						if (outerValue <= 0) {
 							// We have found our issue
 							double innerValue = Math.random() * issue.getSecond();
 
 							for (int j = 0; j < issue.getThird().size(); j++) {
+								// Value, string
 								Pair<Double, String> choice = issue.getThird().get(j);
 								innerValue -= choice.getFirst();
 
@@ -441,7 +426,7 @@ public class Roulette extends AbstractNegotiationParty {
 	public String getDescription() {
 		String[] names = {"Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima", "Mike", "November", "Oscar", "Papa", "Quebec", "Romeo", "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-ray", "Yankee", "Zulu"};
 		String[] descriptors = new String[]{"Submissive", "Soft", "Kind", "Reasonable", "Determined", "Firm", "Tough", "Angry", "Mad"};
-		return descriptors[(int) Math.round(clamp(Math.log10(stubbornness) + 1, 0, descriptors.length))] + " " + names[created % names.length] + " " + getClass().getSimpleName();
+		return descriptors[(int) Math.round(clamp(Math.log10(stubbornness) + 1, 0, descriptors.length))] + " " + names[(Roulette.created - 1) % names.length] + " " + getClass().getSimpleName();
 	}
 
 	private Bid getMaxUtilityBid() {
