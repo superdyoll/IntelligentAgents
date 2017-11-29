@@ -1,108 +1,146 @@
 import negotiator.AgentID;
 import negotiator.Bid;
-import negotiator.actions.Accept;
-import negotiator.actions.Action;
-import negotiator.actions.EndNegotiation;
-import negotiator.actions.Offer;
+import negotiator.actions.*;
 import negotiator.issue.*;
-import negotiator.parties.AbstractNegotiationParty;
-import negotiator.parties.NegotiationInfo;
-import negotiator.utility.AdditiveUtilitySpace;
-import negotiator.utility.EvaluatorDiscrete;
-import negotiator.utility.UtilitySpace;
+import negotiator.parties.*;
+import negotiator.utility.*;
 
 import java.sql.Timestamp;
 import java.util.*;
 
+@SuppressWarnings({"SameParameterValue", "WeakerAccess", "unused"})
 public class Roulette extends AbstractNegotiationParty {
-	private String description = "A Game of Chance";
-	private int round = 0;
-	private double stubbornness = 2_500;
-	private boolean randomness = true;
-	private int randomSpike = (int) Math.round(Math.random() * 50);
-	private Bid maxbid;
-	private Map<Integer, Double> weights = new HashMap<>();
+	/**
+	 * Round tracker
+	 */
+	protected int round = 0;
+	/**
+	 * Controls how quickly the agent concedes
+	 */
+	@SuppressWarnings("CanBeFinal")
+	protected double stubbornness = 2_500;
+	/**
+	 * Make the agent random
+	 */
+	@SuppressWarnings("CanBeFinal")
+	protected boolean randomness = true;
+	protected int randomSpike = randomness ? (int) Math.round(Math.random() * 50) : 0;
+	/**
+	 * Max bid possible for the agent
+	 */
+	protected Bid maxBid;
+	/**
+	 * Weighting of different issues
+	 */
+	protected final Map<Integer, Double> weights = new HashMap<>();
 
-	private Deque<Pair<AgentID, Offer>> history = new LimitedQueue<>(250);
-	private Map<AgentID, Offer> agents = new HashMap<>();
-	private Map<Integer, Map<String, Integer>> frequencies = new HashMap<>();
+	/**
+	 * History of bids made
+	 */
+	protected final Deque<Pair<AgentID, Offer>> history = new LimitedQueue<>(250);
+	/**
+	 * The other agents in the negotiation
+	 */
+	protected final Map<AgentID, Offer> agents = new HashMap<>();
+	/**
+	 * Frequency of previous values bids
+	 */
+	protected final Map<Integer, Map<String, Integer>> frequencies = new HashMap<>();
 
 	/**
 	 * Lerp between two values a and b using t
 	 */
-	private int lerp(int a, int b, float t) {
+	protected static int lerp(int a, int b, float t) {
 		return (int) (a + t * (b - a));
 	}
-	private int lerp(int a, int b, double t) {
+	protected static int lerp(int a, int b, double t) {
 		return (int) (a + t * (b - a));
 	}
-	private float lerp(float a, float b, float t) {
+	protected static float lerp(float a, float b, float t) {
 		return a + t * (b - a);
 	}
-	private double lerp(double a, double b, double t) {
+	protected static double lerp(double a, double b, double t) {
 		return a + t * (b - a);
 	}
 
 	/**
 	 * Clamp value x between min and max
 	 */
-	private int clamp(int x, int min, int max) {
+	protected static int clamp(int x, int min, int max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-	private float clamp(float x, float min, float max) {
+	protected static float clamp(float x, float min, float max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-	private double clamp(double x, double min, double max) {
+	protected static double clamp(double x, double min, double max) {
 		return x < max ? (x > min ? x : min) : max;
 	}
-	private float clamp01(int x) {
+	protected static float clamp01(int x) {
 		return clamp(x, 0, 1);
 	}
-	private float clamp01(float x) {
+	protected static float clamp01(float x) {
 		return clamp(x, 0, 1);
 	}
-	private double clamp01(double x) {
+	protected static double clamp01(double x) {
 		return clamp(x, 0, 1);
 	}
 
-	private void log(Object... objects) {
+	/**
+	 * Log formatted messages
+	 */
+	protected void log(Object... objects) {
 		StringBuilder builder = new StringBuilder();
 		builder.append(new Timestamp(System.currentTimeMillis())).append(" ").append(getDescription()).append(": ");
 		for (Object object : objects) builder.append(object);
 		System.out.println(builder.toString());
 	}
-	private void warn(Object... objects) {
+
+	/**
+	 * Warn formatted messages
+	 */
+	protected void warn(Object... objects) {
 		StringBuilder builder = new StringBuilder();
 		builder.append(new Timestamp(System.currentTimeMillis())).append(" ").append(getDescription()).append(": ");
 		for (Object object : objects) builder.append(object);
 		System.err.println(builder.toString());
 	}
 
-	private boolean within(int value, int min, int max) {return value >= min && value <= max;}
-	private boolean within(float value, float min, float max) {return value >= min && value <= max;}
-	private boolean within(double value, double min, double max) {return value >= min && value <= max;}
+	/**
+	 * Check if value is within range
+	 */
+	protected static boolean within(int value, int min, int max) {
+		return value >= min && value <= max;
+	}
+	protected static boolean within(float value, float min, float max) {
+		return value >= min && value <= max;
+	}
+	protected static boolean within(double value, double min, double max) {
+		return value >= min && value <= max;
+	}
 
 	/**
-	 * How much are we willing to conceed at time t?
+	 * How much are we willing to concede at time t?
 	 */
-	private double conceed(double t) {
-		--randomSpike;
+	protected double concede(double t) {
 		double randomAmount = 0;
-		if(randomSpike <= 0) {
-			randomAmount = Math.random() * 0.25;
-			randomSpike = (int) Math.round(Math.random() * 50);
+		if(randomness) {
+			--randomSpike;
+			if (randomSpike <= 0) {
+				randomAmount = Math.random() * 0.25;
+				randomSpike = (int) Math.round(Math.random() * 50);
+			}
 		}
 
-		double value = randomness ?
-				clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95 + Math.random() * 0.1 + randomAmount):
-				clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
-
-		return value;
+		return randomness ?
+			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95 + Math.random() * 0.1 + randomAmount):
+			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
 	}
 
 	@Override
 	public void init(NegotiationInfo info) {
 		super.init(info);
+
+		log("Initialised");
 	}
 
 	/**
@@ -114,34 +152,42 @@ public class Roulette extends AbstractNegotiationParty {
 		try {
 			log("ChooseAction(" + list + ")");
 
-			if (maxbid == null) {
-				maxbid = this.getMaxUtilityBid();
-				agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxbid));
+			// Check if the max  bid has been set
+			if (maxBid == null) {
+				// Set the max bid
+				maxBid = this.getMaxUtilityBid();
 
+				// Add ourselves to the agents with our preference
+				agents.put(this.getPartyId(), new Offer(this.getPartyId(), maxBid));
+
+				// Get the utility space
 				UtilitySpace space = this.getUtilitySpace();
+
 				// Default weights of value = 1
-				int numberOfIssues = maxbid.getIssues().size();
+				int numberOfIssues = maxBid.getIssues().size();
 
 				// Assign weights if we are additive
 				if (space instanceof AdditiveUtilitySpace) {
 					AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
 
 					// Find the weights using the additive space
-					Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
-					for (Integer id : map.keySet()) weights.put(id, additiveSpace.getWeight(id) * numberOfIssues);
+					Map<Integer, Value> map = new HashMap<>(maxBid.getValues());
+
+					// Get the weighting of the issues
+					map.keySet().forEach((Integer id) -> weights.put(id, additiveSpace.getWeight(id) * numberOfIssues));
 				} else {
 					// Set weights to 1 as a fallback
-					Map<Integer, Value> map = new HashMap<>(maxbid.getValues());
-					for (Integer id : map.keySet()) weights.put(id, 1.0);
+					Map<Integer, Value> map = new HashMap<>(maxBid.getValues());
+					map.keySet().forEach((Integer id) -> weights.put(id, 1.0));
 				}
 
-				this.receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), new Bid(this.getUtilitySpace().getDomain(), maxbid.getValues())));
+				this.receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), new Bid(this.getUtilitySpace().getDomain(), maxBid.getValues())));
 			}
 
 			// According to Stacked Alternating Offers Protocol list includes
 			// Accept, Offer and EndNegotiation actions only.
 			double time = getTimeLine().getTime(); // Gets the time, running from t = 0 (start) to t = 1 (deadline).
-			double willingness = conceed(time);
+			double willingness = concede(time);
 			// The time is normalized, so agents need not be
 			// concerned with the actual internal clock.
 
@@ -150,15 +196,17 @@ public class Roulette extends AbstractNegotiationParty {
 
 			// We need some time to understand our opponents
 			// Means we have enough data and we don't (really) need to worry about nulls
-			if (round <= 2) return new Offer(this.getPartyId(), maxbid);
+			if (round <= 2) return new Offer(this.getPartyId(), maxBid);
 
 			log("Willingness: " + willingness);
 
 			// Last bid
 			Bid last = history.peekLast().getSecond().getBid();
 
-			// Make a proposal
-			Map<Integer, Value> proposal = new HashMap<>(maxbid.getValues());
+			// Make a proposal, needs to be HashMap to avoid a cast
+			HashMap<Integer, Value> proposal = new HashMap<>(maxBid.getValues());
+
+			// TODO: Make into a class
 			// Roulette
 			Pair<Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Pair<>(0.0, new ArrayList<>());
 
@@ -166,21 +214,30 @@ public class Roulette extends AbstractNegotiationParty {
 				if (value instanceof ValueDiscrete) {
 					// Only makes sense if we have an additive space
 					if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+
+						// Store a list of pairs for later
 						List<Pair<Double, String>> sublist = new ArrayList<>();
 						double max = 0, total = 0;
 
 						// iterate over values, adding to pair
 						AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) this.getUtilitySpace();
 
-						for (ValueDiscrete valueDiscrete : ((IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1)).getValues()) {
-							// score each choice
+						// Get the current Issue
+						IssueDiscrete issueDiscrete = (IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1);
+
+						for (ValueDiscrete valueDiscrete : issueDiscrete.getValues()) {
+							// score each choice, default is 0.5
 							double evaluation = 0.5;
 							try {
+								// Get the evaluation for that value
 								evaluation = ((EvaluatorDiscrete) additiveSpace.getEvaluator(id)).getEvaluation(valueDiscrete);
 							} catch (Exception e) {
 								warn("Failed to getEvaluation(" + valueDiscrete + ")");
 							}
-							double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxbid.getIssues().size());
+							// Get the frequency for the value if it's not yet been seen default to 1/number of issues
+							double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxBid.getIssues().size());
+
+							// Create a fitness for the value
 							double score = evaluation * frequency * weights.get(id);
 							max = Math.max(max, score);
 							total += score;
@@ -200,20 +257,22 @@ public class Roulette extends AbstractNegotiationParty {
 					}
 
 					int bestValue = sum / count; // Start with the average
-					int minDifference = Math.abs(bestValue - ((ValueInteger) maxbid.getValue(id)).getValue());
+					int minDifference = Math.abs(bestValue - ((ValueInteger) maxBid.getValue(id)).getValue());
 
 					for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 						if (agent.getKey() == this.getPartyId()) continue;
 
-						int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxbid.getValue(id)).getValue());
+						int difference = Math.abs(((ValueInteger) agent.getValue().getBid().getValue(id)).getValue() - ((ValueInteger) maxBid.getValue(id)).getValue());
 						if (difference < minDifference) {
 							minDifference = difference;
 							bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
 						}
 					}
 
-					proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
+					proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxBid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 				} else if (value instanceof ValueReal) {
+					System.out.println("WE WERE TOLD THERE WOULDN'T BE ANY REAL'S!!!!");
+
 					double sum = 0;
 					long count = 0;
 
@@ -223,46 +282,47 @@ public class Roulette extends AbstractNegotiationParty {
 					}
 
 					double bestValue = sum / count; // Start with the average
-					double minDifference = Math.abs(bestValue - ((ValueReal) maxbid.getValue(id)).getValue());
+					double minDifference = Math.abs(bestValue - ((ValueReal) maxBid.getValue(id)).getValue());
 
 					for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
 						if (agent.getKey() == this.getPartyId()) continue;
 
-						double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxbid.getValue(id)).getValue());
+						double difference = Math.abs(((ValueReal) agent.getValue().getBid().getValue(id)).getValue() - ((ValueReal) maxBid.getValue(id)).getValue());
 						if (difference < minDifference) {
 							minDifference = difference;
-							bestValue = ((ValueInteger) agent.getValue().getBid().getValue(id)).getValue();
+							bestValue = ((ValueReal) agent.getValue().getBid().getValue(id)).getValue();
 						}
 					}
 
-					proposal.put(id, new ValueReal(lerp(bestValue, ((ValueReal) maxbid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
+					proposal.put(id, new ValueReal(lerp(bestValue, ((ValueReal) maxBid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
 				} else {
 					throw new UnsupportedOperationException("Unexpected value type!");
 				}
 			});
 
+			// TODO: Improve readability
 			// Spin the wheel, if additive
 			if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
 				// Loop until within range, loop with an upper limit.
 				// Always spin the wheel once, for added randomness
 				int c = 0;
-				for (; c == 0 || (c < 20 * maxbid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal)), willingness - 0.1, willingness + 0.1)); c++) {
-					double outervalue = Math.random() * roulette.getFirst();
+				for (; c == 0 || (c < 20 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1)); c++) {
+					double outerValue = Math.random() * roulette.getFirst();
 
 					for (int i = 0; i < roulette.getSecond().size(); i++) {
 						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getSecond().get(i);
-						outervalue -= issue.getFirst();
+						outerValue -= issue.getFirst();
 
-						if (outervalue <= 0) {
+						if (outerValue <= 0) {
 							// We have found our issue
-							double innervalue = Math.random() * issue.getSecond();
+							double innerValue = Math.random() * issue.getSecond();
 
 							for (int j = 0; j < issue.getThird().size(); j++) {
 								Pair<Double, String> choice = issue.getThird().get(j);
-								innervalue -= choice.getFirst();
+								innerValue -= choice.getFirst();
 
 								// We have found our choice
-								if (innervalue <= 0) {
+								if (innerValue <= 0) {
 									proposal.put(i, new ValueDiscrete(choice.getSecond()));
 									break;
 								}
@@ -276,7 +336,7 @@ public class Roulette extends AbstractNegotiationParty {
 			}
 
 			// Is the offer good enough?
-			Bid bid = new Bid(this.getUtilitySpace().getDomain(), (HashMap) proposal);
+			Bid bid = new Bid(this.getUtilitySpace().getDomain(), proposal);
 			if (this.getUtilitySpace().getUtility(last) >= this.getUtilitySpace().getUtility(bid)) {
 				log("Accepting offer " + this.getUtilitySpace().getUtility(last) + " " + last);
 				Accept accept = new Accept(this.getPartyId(), last);
@@ -290,9 +350,9 @@ public class Roulette extends AbstractNegotiationParty {
 				return offer;
 			}
 		} catch (Throwable throwable) {
-			warn("CHOOSEACTION FAILED, RETURNING EITHER MAX BID OR A RANDOM BID TO KEEP US IN THE RUNNING!!!");
+			warn("CHOOSE ACTION FAILED, RETURNING EITHER MAX BID OR A RANDOM BID TO KEEP US IN THE RUNNING!!!");
 			throwable.printStackTrace();
-			return new Offer(this.getPartyId(), maxbid != null ? maxbid : this.generateRandomBid());
+			return new Offer(this.getPartyId(), maxBid != null ? maxBid : this.generateRandomBid());
 		}
 	}
 
@@ -333,10 +393,10 @@ public class Roulette extends AbstractNegotiationParty {
 			} else if (act instanceof Accept) {
 				log("Awesome!");
 			} else if (act instanceof EndNegotiation) {
-				warn("BOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO!");
+				warn("BOO!!!");
 			}
 		} catch(Throwable throwable) {
-			warn("RECEIVEMESSAGE FAILED, RETURNING EITHER MAX BID OR A RANDOM BID TO KEEP US IN THE RUNNING!!!");
+			warn("RECEIVE MESSAGE FAILED, RETURNING EITHER MAX BID OR A RANDOM BID TO KEEP US IN THE RUNNING!!!");
 			throwable.printStackTrace();
 		}
 	}
@@ -346,7 +406,7 @@ public class Roulette extends AbstractNegotiationParty {
 	 */
 	@Override
 	public String getDescription() {
-		return description;
+		return "A Game of Chance";
 	}
 
 	private Bid getMaxUtilityBid() {

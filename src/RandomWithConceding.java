@@ -49,7 +49,7 @@ public class RandomWithConceding extends AbstractNegotiationParty {
     }
 
     /**
-     * How much are we willing to conceed at time t?
+     * How much are we willing to concede at time t?
      */
     private double conceed(double t) {
         return clamp01(- (Math.pow(stubbornness, clamp01(t)) / stubbornness) + 1);
