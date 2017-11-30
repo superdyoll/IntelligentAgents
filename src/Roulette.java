@@ -180,18 +180,46 @@ public class Roulette extends AbstractNegotiationParty {
 				if (space instanceof AdditiveUtilitySpace) {
 					AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
 
-					// Find the weights using the additive space
-					Map<Integer, Value> map = new HashMap<>(maxBid.getValues());
-
 					// Get the weighting of the issues
-					map.keySet().forEach((Integer id) -> weights.put(id, additiveSpace.getWeight(id) * numberOfIssues));
+					maxBid.getValues().forEach((Integer id, Value value) -> weights.put(id, additiveSpace.getWeight(id) * numberOfIssues));
 				} else {
 					// Set weights to 1 as a fallback
 					Map<Integer, Value> map = new HashMap<>(maxBid.getValues());
 					map.keySet().forEach((Integer id) -> weights.put(id, 1.0));
 				}
 
-				this.receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), new Bid(this.getUtilitySpace().getDomain(), maxBid.getValues())));
+				// Preload frequencies, make it much better as it can consider more options
+				maxBid.getValues().forEach((Integer id, Value value) -> {
+					if(value instanceof ValueDiscrete) {
+						IssueDiscrete issueDiscrete = (IssueDiscrete) this.getUtilitySpace().getDomain().getIssues().get(id - 1);
+
+						if (!frequencies.containsKey(id)) {
+							frequencies.put(id, new HashMap<>());
+							frequencies.get(id).put("__total__", 0);
+						}
+
+						int total = 0;
+						for (ValueDiscrete valueDiscrete : issueDiscrete.getValues()) {
+							// Evaluate to get good values that obey our preferences
+							int evaluation = 1;
+
+							try {
+								if (space instanceof AdditiveUtilitySpace) {
+									AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
+									evaluation = (int) Math.ceil(10 * ((EvaluatorDiscrete) ((AdditiveUtilitySpace) this.getUtilitySpace()).getEvaluator(id)).getEvaluation(valueDiscrete));
+								}
+							} catch (Exception e) {
+								warn("Failed to getEvaluation(" + valueDiscrete + ")");
+							}
+
+							total += evaluation;
+							frequencies.get(id).put(valueDiscrete.getValue(), evaluation);
+						}
+						frequencies.get(id).put("__total__", total);
+					}
+				});
+
+				receiveMessage(this.getPartyId(), new Offer(this.getPartyId(), maxBid));
 			}
 
 			// According to Stacked Alternating Offers Protocol list includes
@@ -223,42 +251,39 @@ public class Roulette extends AbstractNegotiationParty {
 
 			proposal.forEach((Integer id, Value value) -> {
 				if (value instanceof ValueDiscrete) {
-					// Only makes sense if we have an additive space
-					if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+					// Store a list of pairs for later
+					List<Pair<Double, String>> sublist = new ArrayList<>();
+					double max = 0, total = 0;
 
-						// Store a list of pairs for later
-						List<Pair<Double, String>> sublist = new ArrayList<>();
-						double max = 0, total = 0;
+					// Get the current Issue
+					IssueDiscrete issueDiscrete = (IssueDiscrete) this.getUtilitySpace().getDomain().getIssues().get(id - 1);
 
-						// iterate over values, adding to pair
-						AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) this.getUtilitySpace();
+					for (ValueDiscrete valueDiscrete : issueDiscrete.getValues()) {
+						// score each choice, default is 0.5
+						double evaluation = 0.5;
 
-						// Get the current Issue
-						IssueDiscrete issueDiscrete = (IssueDiscrete) additiveSpace.getDomain().getIssues().get(id - 1);
-
-						for (ValueDiscrete valueDiscrete : issueDiscrete.getValues()) {
-							// score each choice, default is 0.5
-							double evaluation = 0.5;
+						// Only makes sense if we have an additive space
+						if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
 							try {
 								// Get the evaluation for that value
-								evaluation = ((EvaluatorDiscrete) additiveSpace.getEvaluator(id)).getEvaluation(valueDiscrete);
+								evaluation = ((EvaluatorDiscrete) ((AdditiveUtilitySpace) this.getUtilitySpace()).getEvaluator(id)).getEvaluation(valueDiscrete);
 							} catch (Exception e) {
 								warn("Failed to getEvaluation(" + valueDiscrete + ")");
 							}
-							// Get the frequency for the value if it's not yet been seen default to 1/number of issues
-							double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxBid.getIssues().size());
-
-							// Create a fitness for the value
-							double score = evaluation * frequency * weights.get(id);
-							max = Math.max(max, score);
-							total += score;
-							sublist.add(new Pair<>(score, valueDiscrete.getValue()));
 						}
+						// Get the frequency for the value if it's not yet been seen default to 1/number of issues
+						double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxBid.getIssues().size());
 
-						roulette.setFirst(Math.max(roulette.getFirst(), total));
-						roulette.setSecond(roulette.getSecond() + total);
-						roulette.getThird().add(new Triplet<>(max, total, sublist));
+						// Create a fitness for the value
+						double score = evaluation * frequency * weights.get(id);
+						max = Math.max(max, score);
+						total += score;
+						sublist.add(new Pair<>(score, valueDiscrete.getValue()));
 					}
+
+					roulette.setFirst(Math.max(roulette.getFirst(), total));
+					roulette.setSecond(roulette.getSecond() + total);
+					roulette.getThird().add(new Triplet<>(max, total, sublist));
 				} else if (value instanceof ValueInteger) {
 					int sum = 0;
 					int count = 0;
@@ -400,11 +425,7 @@ public class Roulette extends AbstractNegotiationParty {
 						}
 
 						String string = ((ValueDiscrete) value).getValue();
-						if (!frequencies.get(id).containsKey(string)) {
-							frequencies.get(id).put(string, 1);
-						} else {
-							frequencies.get(id).put(string, frequencies.get(id).get(string) + 1);
-						}
+						frequencies.get(id).put(string, frequencies.get(id).containsKey(string) ? frequencies.get(id).get(string) + 1 : 1);
 						frequencies.get(id).put("__total__", frequencies.get(id).get("__total__") + 1);
 					}
 				});
