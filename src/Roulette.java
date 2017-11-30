@@ -20,18 +20,18 @@ public class Roulette extends AbstractNegotiationParty {
 	 * Controls how quickly the agent concedes
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double stubbornness = 10_000;
+	protected double stubbornness = 100_000;
+	protected double minimumUtility = 0.2;
 	/**
 	 * Make the agent random
 	 */
-	@SuppressWarnings("CanBeFinal")
-	protected boolean randomness = true;
-	protected int randomSpike = randomness ? (int) Math.round(Math.random() * 50) : 0;
+	protected int randomFrequency = 50;
+	protected int randomSpike = (int) Math.round(Math.random() * randomFrequency);
 	/**
 	 * How we want to bias our wheel. 1 = our most important issue never gets changed, > 1 = our most important issue gets changed using the bias
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double issueBias = 1.5; // Don't go below 1!
+	protected double issueBias = 1.25; // Don't go below 1!
 	/**
 	 * Max bid possible for the agent
 	 */
@@ -129,17 +129,13 @@ public class Roulette extends AbstractNegotiationParty {
 	 */
 	protected double concede(double t) {
 		double randomAmount = 0;
-		if(randomness) {
-			--randomSpike;
-			if (randomSpike <= 0) {
-				randomAmount = Math.random() * 0.25;
-				randomSpike = (int) Math.round(Math.random() * 50);
-			}
+		--randomSpike;
+		if (randomSpike <= 0) {
+			randomAmount = Math.random() * 0.25;
+			randomSpike = (int) Math.round(Math.random() * randomFrequency);
 		}
 
-		return randomness ?
-			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.90 + Math.random() * 0.1 + randomAmount):
-			clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.95);
+		return Math.max(minimumUtility, clamp01(-(Math.pow(stubbornness, clamp01(t)) / stubbornness) + 0.90 + Math.random() * 0.1 + randomAmount));
 	}
 
 	public Roulette() {
