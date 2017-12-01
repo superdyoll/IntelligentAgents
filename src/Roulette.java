@@ -53,7 +53,8 @@ public class Roulette extends AbstractNegotiationParty {
 	 */
 	protected final Map<Integer, Map<String, Integer>> frequencies = new HashMap<>();
 
-	/**
+    //<editor-fold desc="Lerps">
+    /**
 	 * Lerp between two values a and b using t
 	 */
 	protected static int lerp(int a, int b, float t) {
@@ -68,8 +69,10 @@ public class Roulette extends AbstractNegotiationParty {
 	protected static double lerp(double a, double b, double t) {
 		return a + t * (b - a);
 	}
+    //</editor-fold>
 
-	/**
+    //<editor-fold desc="Clamps">
+    /**
 	 * Clamp value x between min and max
 	 */
 	protected static int clamp(int x, int min, int max) {
@@ -90,6 +93,7 @@ public class Roulette extends AbstractNegotiationParty {
 	protected static double clamp01(double x) {
 		return clamp(x, 0, 1);
 	}
+    //</editor-fold>
 
 	/**
 	 * Log formatted messages
@@ -111,7 +115,8 @@ public class Roulette extends AbstractNegotiationParty {
 		System.err.println(builder.toString());
 	}
 
-	/**
+    //<editor-fold desc="Withins">
+    /**
 	 * Check if value is within range
 	 */
 	protected static boolean within(int value, int min, int max) {
@@ -123,6 +128,7 @@ public class Roulette extends AbstractNegotiationParty {
 	protected static boolean within(double value, double min, double max) {
 		return value >= min && value <= max;
 	}
+    //</editor-fold>
 
 	/**
 	 * How much are we willing to concede at time t?
@@ -280,7 +286,8 @@ public class Roulette extends AbstractNegotiationParty {
 					RouletteWheel.InnerWheel innerWheel = new RouletteWheel.InnerWheel(max, total, sublist);
 					rouletteWheel.addInnerWheel(total, innerWheel);
 				} else if (value instanceof ValueInteger) {
-					int sum = 0;
+                    //<editor-fold desc="Value Integer Rules">
+                    int sum = 0;
 					int count = 0;
 
 					for (Map.Entry<AgentID, Offer> agent : agents.entrySet()) {
@@ -302,8 +309,10 @@ public class Roulette extends AbstractNegotiationParty {
 					}
 
 					proposal.put(id, new ValueInteger(lerp(bestValue, ((ValueInteger) maxBid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
+                    //</editor-fold>
 				} else if (value instanceof ValueReal) {
-					System.out.println("WE WERE TOLD THERE WOULDN'T BE ANY REAL'S!!!!");
+                    //<editor-fold desc="Value Real Rules">
+                    System.out.println("WE WERE TOLD THERE WOULDN'T BE ANY REAL'S!!!!");
 
 					double sum = 0;
 					long count = 0;
@@ -327,6 +336,7 @@ public class Roulette extends AbstractNegotiationParty {
 					}
 
 					proposal.put(id, new ValueReal(lerp(bestValue, ((ValueReal) maxBid.getValue(id)).getValue(), Math.pow(willingness, weights.get(id)))));
+                    //</editor-fold>
 				} else {
 					throw new UnsupportedOperationException("Unexpected value type!");
 				}
