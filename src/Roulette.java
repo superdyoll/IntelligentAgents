@@ -241,9 +241,8 @@ public class Roulette extends AbstractNegotiationParty {
 			// Make a proposal, needs to be HashMap to avoid a cast
 			HashMap<Integer, Value> proposal = new HashMap<>(maxBid.getValues());
 
-			// TODO: Make into a class
-			// Roulette
-			Triplet<Double, Double, List<Triplet<Double, Double, List<Pair<Double, String>>>>> roulette = new Triplet<>(0.0, 0.0, new ArrayList<>());
+			// Roulette Wheel
+			RouletteWheel rouletteWheel = new RouletteWheel();
 
 			proposal.forEach((Integer id, Value value) -> {
 				if (value instanceof ValueDiscrete) {
@@ -277,9 +276,9 @@ public class Roulette extends AbstractNegotiationParty {
 						sublist.add(new Pair<>(score, valueDiscrete.getValue()));
 					}
 
-					roulette.setFirst(Math.max(roulette.getFirst(), total));
-					roulette.setSecond(roulette.getSecond() + total);
-					roulette.getThird().add(new Triplet<>(max, total, sublist));
+					rouletteWheel.updateMax(total);
+					RouletteWheel.InnerWheel innerWheel = new RouletteWheel.InnerWheel(max, total, sublist);
+					rouletteWheel.addInnerWheel(total, innerWheel);
 				} else if (value instanceof ValueInteger) {
 					int sum = 0;
 					int count = 0;
@@ -344,20 +343,20 @@ public class Roulette extends AbstractNegotiationParty {
 					(c < 10 * maxBid.getIssues().size() && !within(this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)), willingness - 0.1, willingness + 0.1)) ||
 					(c < 20 * maxBid.getIssues().size() && this.getUtility(new Bid(this.getUtilitySpace().getDomain(), proposal)) <= willingness - 0.1);
 				c++) {
-					double outerValue = Math.random() * roulette.getSecond();
+					double outerValue = Math.random() * rouletteWheel.getTotal();
 
-					for (int i = 0; i < roulette.getThird().size(); i++) {
+					for (int i = 0; i < rouletteWheel.getInnerWheels().size(); i++) {
 						// Max, total, sublist
-						Triplet<Double, Double, List<Pair<Double, String>>> issue = roulette.getThird().get(i);
-						outerValue -= roulette.getFirst() * issueBias - issue.getFirst();
+						RouletteWheel.InnerWheel issue = rouletteWheel.getInnerWheels().get(i);
+						outerValue -= rouletteWheel.getMax() * issueBias - issue.getMax();
 
 						if (outerValue <= 0) {
 							// We have found our issue
-							double innerValue = Math.random() * issue.getSecond();
+							double innerValue = Math.random() * issue.getTotal();
 
-							for (int j = 0; j < issue.getThird().size(); j++) {
+							for (int j = 0; j < issue.getValuesList().size(); j++) {
 								// Value, string
-								Pair<Double, String> choice = issue.getThird().get(j);
+								Pair<Double, String> choice = issue.getValuesList().get(j);
 								innerValue -= choice.getFirst();
 
 								// We have found our choice
@@ -453,6 +452,85 @@ public class Roulette extends AbstractNegotiationParty {
 			e.printStackTrace();
 			warn("Failed to get maxUtilityBid()!");
 			return this.generateRandomBid();
+		}
+	}
+
+	protected static class RouletteWheel {
+		private Double max;
+		private Double total;
+		private List<InnerWheel> innerWheels;
+
+		RouletteWheel(){
+			this.max = 0d;
+			this.total = 0d;
+			setInnerWheels(new ArrayList<>());
+		}
+
+
+		public Double getMax() {
+			return max;
+		}
+
+		public void updateMax (Double newMax) {
+			this.max = Math.max(this.max, newMax);
+		}
+
+		public Double getTotal() {
+			return total;
+		}
+
+		public void addToTotal(Double total) {
+			this.total += total;
+		}
+
+		public List<InnerWheel> getInnerWheels() {
+			return innerWheels;
+		}
+
+		public void setInnerWheels(List<InnerWheel> innerWheels) {
+			this.innerWheels = innerWheels;
+		}
+
+		public void addInnerWheel(double total, InnerWheel innerWheel) {
+			updateMax(total);
+			addToTotal(total);
+			getInnerWheels().add(innerWheel);
+		}
+
+		public static class InnerWheel{
+			private Double max;
+			private Double total;
+			private List <Pair<Double, String>> valuesList;
+
+			public InnerWheel(Double max, Double total, List<Pair<Double,String>> valuesList){
+				this.max = max;
+				this.total = total;
+				this.valuesList = valuesList;
+			}
+
+			public Double getMax() {
+				return max;
+			}
+
+			public void setMax(Double max) {
+				this.max = max;
+			}
+
+			public Double getTotal() {
+				return total;
+			}
+
+			public void setTotal(Double total) {
+				this.total = total;
+			}
+
+			public List<Pair<Double, String>> getValuesList() {
+				return valuesList;
+			}
+
+			public void setValuesList(List<Pair<Double, String>> valuesList) {
+				this.valuesList = valuesList;
+			}
 		}
 	}
 }
