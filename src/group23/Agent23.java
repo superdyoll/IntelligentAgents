@@ -22,8 +22,8 @@ public class Agent23 extends AbstractNegotiationParty {
 	 * Controls how quickly the agent concedes
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double stubbornness = 10_000;
-	protected double minimumUtility = 0.15;
+	protected double stubbornness = 13_000;
+	protected double minimumUtility = 0.4;
 	/**
 	 * Make the agent random
 	 */
@@ -33,7 +33,7 @@ public class Agent23 extends AbstractNegotiationParty {
 	 * How we want to bias our wheel. 1 = our most important issue never gets changed, > 1 = our most important issue gets changed using the bias
 	 */
 	@SuppressWarnings("CanBeFinal")
-	protected double issueBias = 1.5; // Don't go below 1!
+	protected double issueBias = 1.15; // Don't go below 1!
 	/**
 	 * Max bid possible for the agent
 	 */
