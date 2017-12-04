@@ -37,7 +37,7 @@ public class Triplet<A, B, C> implements Serializable {
 
 	@Override
 	public String toString() {
-		return "Pair(" + this.getFirst() + ", " + this.getSecond() + "," + this.getThird() + ")";
+		return "group23.Pair(" + this.getFirst() + ", " + this.getSecond() + "," + this.getThird() + ")";
 	}
 
 	public boolean equals(Triplet other) {

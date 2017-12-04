@@ -1,3 +1,5 @@
+package group23;
+
 import java.io.Serializable;
 
 public class Pair<A, B> implements Serializable {
@@ -27,7 +29,7 @@ public class Pair<A, B> implements Serializable {
 
 	@Override
 	public String toString() {
-		return "Pair(" + this.getFirst() + ", " + this.getSecond() + ")";
+		return "group23.Pair(" + this.getFirst() + ", " + this.getSecond() + ")";
 	}
 
 	public boolean equals(Pair other) {
