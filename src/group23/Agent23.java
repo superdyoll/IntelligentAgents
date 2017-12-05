@@ -24,6 +24,7 @@ public class Agent23 extends AbstractNegotiationParty {
 	@SuppressWarnings("CanBeFinal")
 	protected double stubbornness = 13_000;
 	protected double minimumUtility = 0.4;
+	protected double frequencyMultiplier = 5; // Multiply to pre-fill the frequency table.
 	/**
 	 * Make the agent random
 	 */
@@ -210,7 +211,7 @@ public class Agent23 extends AbstractNegotiationParty {
 							try {
 								if (space instanceof AdditiveUtilitySpace) {
 									AdditiveUtilitySpace additiveSpace = (AdditiveUtilitySpace) space;
-									evaluation = (int) Math.ceil(10 * ((EvaluatorDiscrete) ((AdditiveUtilitySpace) this.getUtilitySpace()).getEvaluator(id)).getEvaluation(valueDiscrete));
+									evaluation = (int) Math.ceil(frequencyMultiplier * ((EvaluatorDiscrete) ((AdditiveUtilitySpace) this.getUtilitySpace()).getEvaluator(id)).getEvaluation(valueDiscrete));
 								}
 							} catch (Exception e) {
 								warn("Failed to getEvaluation(" + valueDiscrete + ")");
