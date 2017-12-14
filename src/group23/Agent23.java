@@ -276,7 +276,7 @@ public class Agent23 extends AbstractNegotiationParty {
 							}
 						}
 						// Get the frequency for the value if it's not yet been seen default to 1/number of issues
-						double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? frequencies.get(id).get(valueDiscrete.getValue()) / frequencies.get(id).get("__total__") : (1.0 / maxBid.getIssues().size());
+						double frequency = frequencies.get(id).containsKey(valueDiscrete.getValue()) ? ((double) frequencies.get(id).get(valueDiscrete.getValue()) / (double) frequencies.get(id).get("__total__")) : (1.0 / maxBid.getIssues().size());
 
 						// Create a fitness for the value
 						double score = evaluation * frequency * weights.get(id);
@@ -348,6 +348,8 @@ public class Agent23 extends AbstractNegotiationParty {
 			// TODO: Improve readability
 			// Spin the wheel, if additive
 			if (this.getUtilitySpace() instanceof AdditiveUtilitySpace) {
+				log(rouletteWheel);
+
 				// Loop until within range, loop with an upper limit.
 				// If we fail to find a good solution, just try to find one with a minimum value
 				int c = 0;
@@ -479,7 +481,6 @@ public class Agent23 extends AbstractNegotiationParty {
 			setInnerWheels(new ArrayList<>());
 		}
 
-
 		public Double getMax() {
 			return max;
 		}
@@ -508,6 +509,15 @@ public class Agent23 extends AbstractNegotiationParty {
 			updateMax(total);
 			addToTotal(total);
 			getInnerWheels().add(innerWheel);
+		}
+
+		@Override
+		public String toString() {
+			StringBuilder builder = new StringBuilder().append("Roulette[\nOuterWheel:\n");
+			for(InnerWheel wheel : innerWheels) builder.append(wheel.getMax()).append(",");
+			builder.append("\nInnerWheels:\n");
+			for(InnerWheel wheel : innerWheels) builder.append(wheel).append("\n");
+			return builder.append("]").toString();
 		}
 
 		public static class InnerWheel{
@@ -543,6 +553,13 @@ public class Agent23 extends AbstractNegotiationParty {
 
 			public void setValuesList(List<Pair<Double, String>> valuesList) {
 				this.valuesList = valuesList;
+			}
+
+			@Override
+			public String toString() {
+				StringBuilder builder = new StringBuilder();
+				for(Pair pair : valuesList) builder.append(pair.getFirst()).append(",");
+				return builder.toString();
 			}
 		}
 	}
