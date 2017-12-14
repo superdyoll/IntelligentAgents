@@ -360,18 +360,24 @@ public class Agent23 extends AbstractNegotiationParty {
 				c++) {
 					double outerValue = Math.random() * rouletteWheel.getTotal();
 
+					// Start on a random wheel
+					int is = rouletteWheel.getInnerWheels().size();
+					int io = (int) Math.round(Math.random() * is);
 					for (int i = 0; i < rouletteWheel.getInnerWheels().size(); i++) {
 						// Max, total, sublist
-						RouletteWheel.InnerWheel issue = rouletteWheel.getInnerWheels().get(i);
+						RouletteWheel.InnerWheel issue = rouletteWheel.getInnerWheels().get((i + io) % is);
 						outerValue -= rouletteWheel.getMax() * issueBias - issue.getMax();
 
 						if (outerValue <= 0) {
 							// We have found our issue
 							double innerValue = Math.random() * issue.getTotal();
 
+							// Start on a random wheel
+							int js = issue.getValuesList().size();
+							int jo = (int) Math.round(Math.random() * js);
 							for (int j = 0; j < issue.getValuesList().size(); j++) {
 								// Value, string
-								Pair<Double, String> choice = issue.getValuesList().get(j);
+								Pair<Double, String> choice = issue.getValuesList().get((j + jo) % js);
 								innerValue -= choice.getFirst();
 
 								// We have found our choice
